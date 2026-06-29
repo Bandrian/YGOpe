@@ -1,0 +1,2742 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏王残局编辑器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        input, textarea {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff;
+        }
+
+        /* 强制横屏锁定 */
+        @media screen and (orientation: portrait) {
+            #rotate-overlay {
+                display: flex !important;
+            }
+            .app-container {
+                display: none !important;
+            }
+        }
+
+        #rotate-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #1a1a2e;
+            z-index: 99999;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .rotate-icon {
+            width: 80px;
+            height: 80px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-radius: 16px;
+            position: relative;
+            animation: rotateHint 2s ease-in-out infinite;
+        }
+
+        .rotate-icon::after {
+            content: '📱';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 32px;
+        }
+
+        @keyframes rotateHint {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(90deg); }
+        }
+
+        .rotate-text {
+            font-size: 16px;
+            color: #aaa;
+            text-align: center;
+        }
+
+        /* 横屏布局：左侧详情 + 中间场地 + 右侧信息栏 */
+        .app-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: row;
+        }
+
+        /* ===== 左侧：卡片详情面板 ===== */
+        .card-detail-panel {
+            width: 180px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 4px 0 4px 4px;
+            flex-shrink: 0;
+        }
+
+        .detail-panel-section {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            padding: 8px;
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-panel-image {
+            width: 100%;
+            flex-shrink: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .detail-panel-image img { width: 100%; height: 100%; object-fit: contain; }
+
+        .detail-panel-placeholder {
+            color: rgba(255, 255, 255, 0.2);
+            font-size: 11px;
+            text-align: center;
+        }
+
+        .detail-panel-name {
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .detail-panel-type {
+            font-size: 10px;
+            color: #aaa;
+            margin-bottom: 6px;
+        }
+
+        .detail-panel-desc {
+            font-size: 10px;
+            line-height: 1.5;
+            color: #999;
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .detail-panel-desc::-webkit-scrollbar { width: 2px; }
+        .detail-panel-desc::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 1px; }
+
+        /* 电脑平台：左侧详情面板宽度和字体翻倍 */
+        @media (min-width: 1024px) {
+            .card-detail-panel { width: 360px; }
+            .detail-panel-name { font-size: 26px; }
+            .detail-panel-type { font-size: 20px; }
+            .detail-panel-desc { font-size: 20px; }
+        }
+
+        /* ===== 左侧：场地主体（中心旋转对称） ===== */
+        .field-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 0.5vmin;
+            gap: 0.5vmin;
+            min-width: 0;
+        }
+
+        /* 对手信息栏 */
+        .player-info-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 0.8vmin;
+            padding: 0.5vmin 1vmin;
+        }
+
+        .hint-btn-area {
+            padding: 6px 8px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .hint-btn {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(233, 69, 96, 0.7);
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .hint-btn:hover { background: rgba(233, 69, 96, 0.9); }
+        .hint-preview {
+            font-size: 10px;
+            color: #888;
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .player-name { font-size: 11px; color: #ccc; }
+
+        .lp-display-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .lp-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff6b6b;
+            cursor: pointer;
+        }
+
+        .lp-value.opponent { color: #4ecdc4; }
+
+        .lp-bar {
+            width: 60px;
+            height: 5px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .lp-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        .lp-bar-fill.opponent { background: linear-gradient(90deg, #4ecdc4, #44a3aa); }
+
+        /* 手牌区域 */
+        .hand-area {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 0.8vmin;
+            padding: 0.5vmin 1vmin;
+            min-height: 14vmin;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .hand-cards {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5vmin;
+            overflow-x: auto;
+            padding-bottom: 0.2vmin;
+            scrollbar-width: none;
+            height: 100%;
+        }
+
+        .hand-cards::-webkit-scrollbar { display: none; }
+
+        .hand-card {
+            flex-shrink: 0;
+            width: 13vmin;
+            height: 13vmin;
+            border-radius: 0.8vmin;
+            overflow: hidden;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .hand-card img { width: 100%; height: 100%; object-fit: contain; }
+
+        /* 决斗场地 - CSS Grid 布局（等比缩放） */
+        .duel-field {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 1vmin;
+            padding: 1vmin;
+            flex: 1;
+            display: grid;
+            grid-template-columns: 10vmin repeat(5, 13vmin) 10vmin;
+            grid-template-rows: repeat(5, 13vmin);
+            gap: 1vmin;
+            justify-content: center;
+            align-content: center;
+        }
+
+        .field-zone {
+            width: 13vmin;
+            height: 13vmin;
+            background: rgba(255, 255, 255, 0.06);
+            border: 0.3vmin dashed rgba(255, 255, 255, 0.15);
+            border-radius: 0.5vmin;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: all 0.2s;
+            overflow: hidden;
+        }
+
+        /* 我方格子淡蓝色 */
+        .field-zone[data-zone^="player-"] { background: rgba(100, 149, 237, 0.15); border-color: rgba(100, 149, 237, 0.25); }
+        /* 对手格子淡红色 */
+        .field-zone[data-zone^="opponent-"] { background: rgba(237, 100, 100, 0.15); border-color: rgba(237, 100, 100, 0.25); }
+
+        .field-zone.highlight { border-color: #e94560; background: rgba(233, 69, 96, 0.15); }
+
+        /* 拖拽相关样式 */
+        .field-zone.drag-over,
+        .side-zone.drag-over {
+            border-color: #ffcc00 !important;
+            background: rgba(255, 204, 0, 0.2) !important;
+            box-shadow: inset 0 0 8px rgba(255, 204, 0, 0.3);
+        }
+
+        .hand-area.drag-over {
+            background: rgba(255, 204, 0, 0.2) !important;
+            border-color: #ffcc00 !important;
+        }
+
+        .card.dragging {
+            opacity: 0.4;
+        }
+
+        .drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.8;
+            transform: scale(0.8);
+        }
+
+        .field-zone .zone-label {
+            position: absolute;
+            font-size: 1.8vmin;
+            color: rgba(255, 255, 255, 0.55);
+            pointer-events: none;
+            font-weight: 500;
+        }
+
+        .field-zone.occupied { border-style: solid; border-color: rgba(255, 255, 255, 0.35); }
+
+        .side-zone {
+            width: 10vmin;
+            height: 13vmin;
+            background: rgba(255, 255, 255, 0.06);
+            border: 0.3vmin dashed rgba(255, 255, 255, 0.15);
+            border-radius: 0.5vmin;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            font-size: 1.8vmin;
+            color: rgba(255,255,255,0.55);
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .side-zone.occupied { border-style: solid; border-color: rgba(255, 255, 255, 0.35); }
+
+        /* 我方侧区淡蓝色 */
+        .side-zone[data-zone^="player-"] { background: rgba(100, 149, 237, 0.15); border-color: rgba(100, 149, 237, 0.25); }
+        /* 对手侧区淡红色 */
+        .side-zone[data-zone^="opponent-"] { background: rgba(237, 100, 100, 0.15); border-color: rgba(237, 100, 100, 0.25); }
+
+        /* ===== 右侧：信息/工具栏 ===== */
+        .info-sidebar {
+            width: 200px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 4px 4px 4px 0;
+        }
+
+        .sidebar-section {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            padding: 8px;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .tool-btn {
+            padding: 8px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #e94560, #c73e54);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .tool-btn:active { transform: scale(0.97); }
+        .tool-btn.secondary { background: rgba(255, 255, 255, 0.15); }
+
+        /* ===== 右侧搜索区域 ===== */
+        .search-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-height: 0;
+        }
+
+        .search-input-container {
+            display: flex;
+            gap: 4px;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 6px 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 11px;
+            outline: none;
+        }
+
+        .search-input:focus { border-color: #e94560; }
+
+        .search-btn {
+            padding: 6px 10px;
+            border: none;
+            border-radius: 6px;
+            background: #e94560;
+            color: #fff;
+            font-size: 11px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .search-results {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-height: 0;
+        }
+
+        .info-sidebar.drag-over {
+            background: rgba(233, 69, 96, 0.1) !important;
+            border-radius: 10px;
+        }
+
+        .search-results::-webkit-scrollbar { width: 3px; }
+        .search-results::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+        .search-footer {
+            text-align: center;
+            font-size: 9px;
+            color: #666;
+            padding-top: 4px;
+        }
+
+        .search-footer a {
+            color: #e94560;
+            text-decoration: none;
+        }
+
+        .result-card {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 6px;
+            cursor: grab;
+            transition: background 0.2s;
+        }
+
+        .result-card:active { background: rgba(255, 255, 255, 0.12); cursor: grabbing; }
+
+        .result-card-img {
+            width: 36px;
+            height: 50px;
+            border-radius: 3px;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+
+        .result-card-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .result-card-name {
+            font-size: 11px;
+            font-weight: 600;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .result-card-type {
+            font-size: 9px;
+            color: #888;
+            margin-top: 1px;
+        }
+
+        .result-card-stats {
+            font-size: 9px;
+            color: #aaa;
+            margin-top: 1px;
+        }
+
+        /* 电脑平台：右侧信息栏宽度和字体翻倍 */
+        @media (min-width: 1024px) {
+            .info-sidebar { width: 400px; }
+            .tool-btn { font-size: 22px; }
+            .search-input { font-size: 22px; }
+            .search-btn { font-size: 22px; }
+            .result-card-name { font-size: 22px; }
+            .result-card-type { font-size: 18px; }
+            .search-footer { font-size: 18px; }
+            .player-name { font-size: 22px; }
+            .lp-value { font-size: 36px; }
+        }
+
+        /* ===== 卡牌样式 ===== */
+        .card {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            border-radius: 3px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .card img { width: 100%; height: 100%; object-fit: contain; }
+
+        .card-back {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #2d1b69 0%, #1a0f3c 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+        }
+
+        .card-back::after { content: '?'; font-size: 4vmin; color: rgba(255, 255, 255, 0.3); }
+
+        .card-back-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 3px;
+        }
+
+        /* 卡牌名称覆盖层 - 放在field-zone层级，不受card旋转影响 */
+        .card-name-overlay {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 0.2vmin 0.4vmin;
+            font-size: 1.6vmin;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* 叠加数量徽章 */
+        .stack-count {
+            position: absolute;
+            top: 0.2vmin; right: 0.2vmin;
+            background: #e94560;
+            color: #fff;
+            font-size: 1.4vmin;
+            font-weight: bold;
+            width: 2.8vmin;
+            height: 2.8vmin;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 11;
+            pointer-events: none;
+        }
+
+        /* 卡牌守备表示：逆时针旋转90° */
+        .card.def-position {
+            transform: rotate(-90deg);
+        }
+        .card.opponent-ctrl {
+            transform: rotate(180deg);
+        }
+        .card.def-position.opponent-ctrl {
+            transform: rotate(90deg);
+        }
+
+        /* ===== 弹窗 ===== */
+        .overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+            z-index: 999;
+        }
+
+        .overlay.show { opacity: 1; visibility: visible; }
+
+        /* 自定义确认弹窗 */
+        .confirm-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .confirm-overlay.show { display: flex; }
+        .confirm-dialog {
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 320px;
+            text-align: center;
+        }
+        .confirm-dialog p {
+            color: #fff;
+            font-size: 15px;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .confirm-btns {
+            display: flex;
+            gap: 12px;
+        }
+        .confirm-btns button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            cursor: pointer;
+            color: #fff;
+        }
+        .confirm-btn-cancel {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .confirm-btn-ok {
+            background: #e94560;
+        }
+
+        .lp-editor {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1a1a2e;
+            border-radius: 20px;
+            padding: 24px;
+            width: 90%;
+            max-width: 320px;
+            z-index: 1001;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .lp-editor.show { opacity: 1; visibility: visible; }
+        .lp-editor-title { font-size: 18px; font-weight: bold; margin-bottom: 16px; text-align: center; }
+
+        .lp-input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 20px;
+            text-align: center;
+            margin-bottom: 16px;
+            outline: none;
+        }
+
+        .lp-input:focus { border-color: #e94560; }
+
+        /* 拨纽开关 */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .toggle-label { font-size: 14px; color: #ccc; }
+        .toggle-switch {
+            position: relative;
+            width: 120px;
+            height: 32px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 16px;
+            cursor: pointer;
+            user-select: none;
+            overflow: hidden;
+            transition: background 0.3s;
+        }
+        .toggle-switch.active {
+            background: rgba(233, 69, 96, 0.3);
+        }
+        .toggle-track {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 10px;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+        .toggle-text {
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+            transition: color 0.3s;
+            font-weight: 600;
+        }
+        .toggle-switch.active .toggle-text.right { color: #fff; }
+        .toggle-switch:not(.active) .toggle-text.left { color: #fff; }
+        .toggle-thumb {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 54px;
+            height: 26px;
+            background: #e94560;
+            border-radius: 13px;
+            transition: transform 0.3s;
+            z-index: 0;
+        }
+        .toggle-switch.active .toggle-thumb {
+            transform: translateX(60px);
+        }
+
+        /* 叠放顺序调整 */
+        .stack-order-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 8px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 6px;
+            margin-bottom: 4px;
+        }
+        .stack-order-name {
+            font-size: 12px;
+            color: #ddd;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+        .stack-order-btns {
+            display: flex;
+            gap: 4px;
+        }
+        .stack-order-btns button {
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 4px;
+            background: rgba(233, 69, 96, 0.6);
+            color: #fff;
+            font-size: 10px;
+            cursor: pointer;
+            padding: 0;
+        }
+        .stack-order-btns button:disabled {
+            background: rgba(255,255,255,0.1);
+            cursor: not-allowed;
+        }
+
+        .lp-quick-btns {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .lp-quick-btn {
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .lp-confirm-btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            background: #e94560;
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .save-load-modal {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1a1a2e;
+            border-radius: 20px;
+            padding: 24px;
+            width: 90%;
+            max-width: 360px;
+            z-index: 1001;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .save-load-modal.show { opacity: 1; visibility: visible; }
+        .save-load-title { font-size: 18px; font-weight: bold; margin-bottom: 16px; text-align: center; }
+
+        .save-name-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 16px;
+            margin-bottom: 12px;
+            outline: none;
+        }
+
+        .saved-list { max-height: 200px; overflow-y: auto; margin-bottom: 16px; }
+
+        .saved-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+
+        .saved-item-name { font-size: 14px; }
+        .saved-item-date { font-size: 11px; color: #888; }
+
+        .saved-item-delete { background: none; border: none; color: #e94560; font-size: 18px; cursor: pointer; }
+
+        .toast {
+            position: fixed;
+            top: 20px; left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 14px;
+            z-index: 2000;
+            transition: transform 0.3s;
+            pointer-events: none;
+        }
+
+        .toast.show { transform: translateX(-50%) translateY(0); }
+
+        .loading {
+            display: inline-block;
+            width: 20px; height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #e94560;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <!-- 横屏锁定提示 -->
+    <div id="rotate-overlay">
+        <div class="rotate-icon"></div>
+        <div class="rotate-text">请将设备横屏使用</div>
+    </div>
+
+    <div class="app-container">
+        <!-- 左侧：卡片详情面板 -->
+        <div class="card-detail-panel">
+            <div class="detail-panel-section">
+                <div class="detail-panel-image" id="detail-panel-image">
+                    <span class="detail-panel-placeholder">悬停卡牌查看详情</span>
+                </div>
+                <div class="detail-panel-name" id="detail-panel-name"></div>
+                <div class="detail-panel-type" id="detail-panel-type"></div>
+                <div class="detail-panel-desc" id="detail-panel-desc"></div>
+            </div>
+            <div class="hint-btn-area">
+                <button class="hint-btn" onclick="openHintEditor()">编辑提示文本</button>
+                <div class="hint-preview" id="hint-preview"></div>
+            </div>
+        </div>
+
+        <!-- 中间：场地主体（中心旋转对称） -->
+        <div class="field-main">
+            <!-- 对手信息 -->
+            <div class="player-info-bar">
+                <div>
+                    <span class="player-name" id="opponent-name" onclick="openNameEditor('opponent')">对手</span>
+                    <div class="lp-display-bar">
+                        <span class="lp-value opponent" id="opponent-lp" onclick="openLPEditor('opponent')">8000</span>
+                        <div class="lp-bar">
+                            <div class="lp-bar-fill opponent" id="opponent-lp-bar" style="width: 100%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="hand-area">
+                    <div class="hand-cards" id="opponent-hand-cards"></div>
+                </div>
+            </div>
+
+            <!-- 决斗场地（中心旋转对称，无分界线） -->
+            <div class="duel-field">
+                <!-- ===== 对手半场（镜像对称） ===== -->
+                <!-- 对手后场 row1：卡组 | 魔陷×5 | 额外 -->
+                <div class="side-zone" data-zone="opponent-deck" onclick="onSideZoneClick(this)">
+                    <span>卡组</span>
+                </div>
+                <div class="field-zone" data-zone="opponent-s-t-4" onclick="onZoneClick(this)">
+                    <span class="zone-label">魔陷/灵摆</span>
+                </div>
+                <div class="field-zone" data-zone="opponent-s-t-3" onclick="onZoneClick(this)">
+                    <span class="zone-label">魔陷</span>
+                </div>
+                <div class="field-zone" data-zone="opponent-s-t-2" onclick="onZoneClick(this)">
+                    <span class="zone-label">魔陷</span>
+                </div>
+                <div class="field-zone" data-zone="opponent-s-t-1" onclick="onZoneClick(this)">
+                    <span class="zone-label">魔陷</span>
+                </div>
+                <div class="field-zone" data-zone="opponent-s-t-0" onclick="onZoneClick(this)">
+                    <span class="zone-label">魔陷/灵摆</span>
+                </div>
+                <div class="side-zone" data-zone="opponent-extra" onclick="onSideZoneClick(this)">
+                    <span>额外卡组</span>
+                </div>
+
+                <!-- 对手前场 row2：墓地 | 怪兽×5 | 场地 -->
+                <div class="side-zone" data-zone="opponent-graveyard" onclick="onSideZoneClick(this)">
+                    <span>墓地</span>
+                </div>
+                <div class="field-zone" data-zone="opponent-monster-4" onclick="onZoneClick(this)">
+                    <span class="zone-label">怪兽</span>
+                </div>
+                <div class="field-zone" data-zone="opponent-monster-3" onclick="onZoneClick(this)">
+                    <span class="zone-label">怪兽</span>
+                </div>
+                <div class="field-zone" data-zone="opponent-monster-2" onclick="onZoneClick(this)">
+                    <span class="zone-label">怪兽</span>
+                </div>
+                <div class="field-zone" data-zone="opponent-monster-1" onclick="onZoneClick(this)">
+                    <span class="zone-label">怪兽</span>
+                </div>
+                <div class="field-zone" data-zone="opponent-monster-0" onclick="onZoneClick(this)">
+                    <span class="zone-label">怪兽</span>
+                </div>
+                <div class="side-zone" data-zone="opponent-field" onclick="onZoneClick(this)">
+                    <span>场地</span>
+                </div>
+
+                <!-- 中间行 row3：除外 | 额外怪兽×2 | 除外 -->
+                <div class="side-zone" data-zone="opponent-banished" onclick="onSideZoneClick(this)">
+                    <span>除外</span>
+                </div>
+                <div class="field-zone" style="grid-column: 3" data-zone="extra-monster-l" onclick="onZoneClick(this)">
+                    <span class="zone-label">额外怪兽</span>
+                </div>
+                <div class="field-zone" style="grid-column: 5" data-zone="extra-monster-r" onclick="onZoneClick(this)">
+                    <span class="zone-label">额外怪兽</span>
+                </div>
+                <div class="side-zone" style="grid-column: 7" data-zone="player-banished" onclick="onSideZoneClick(this)">
+                    <span>除外</span>
+                </div>
+
+                <!-- 我方前场 row4：场地 | 怪兽×5 | 墓地 -->
+                <div class="side-zone" data-zone="player-field" onclick="onZoneClick(this)">
+                    <span>场地</span>
+                </div>
+                <div class="field-zone" data-zone="player-monster-0" onclick="onZoneClick(this)">
+                    <span class="zone-label">怪兽</span>
+                </div>
+                <div class="field-zone" data-zone="player-monster-1" onclick="onZoneClick(this)">
+                    <span class="zone-label">怪兽</span>
+                </div>
+                <div class="field-zone" data-zone="player-monster-2" onclick="onZoneClick(this)">
+                    <span class="zone-label">怪兽</span>
+                </div>
+                <div class="field-zone" data-zone="player-monster-3" onclick="onZoneClick(this)">
+                    <span class="zone-label">怪兽</span>
+                </div>
+                <div class="field-zone" data-zone="player-monster-4" onclick="onZoneClick(this)">
+                    <span class="zone-label">怪兽</span>
+                </div>
+                <div class="side-zone" data-zone="player-graveyard" onclick="onSideZoneClick(this)">
+                    <span>墓地</span>
+                </div>
+
+                <!-- 我方后场 row5：额外 | 魔陷×5 | 卡组 -->
+                <div class="side-zone" data-zone="player-extra" onclick="onSideZoneClick(this)">
+                    <span>额外卡组</span>
+                </div>
+                <div class="field-zone" data-zone="player-s-t-0" onclick="onZoneClick(this)">
+                    <span class="zone-label">魔陷/灵摆</span>
+                </div>
+                <div class="field-zone" data-zone="player-s-t-1" onclick="onZoneClick(this)">
+                    <span class="zone-label">魔陷</span>
+                </div>
+                <div class="field-zone" data-zone="player-s-t-2" onclick="onZoneClick(this)">
+                    <span class="zone-label">魔陷</span>
+                </div>
+                <div class="field-zone" data-zone="player-s-t-3" onclick="onZoneClick(this)">
+                    <span class="zone-label">魔陷</span>
+                </div>
+                <div class="field-zone" data-zone="player-s-t-4" onclick="onZoneClick(this)">
+                    <span class="zone-label">魔陷/灵摆</span>
+                </div>
+                <div class="side-zone" data-zone="player-deck" onclick="onSideZoneClick(this)">
+                    <span>卡组</span>
+                </div>
+            </div>
+
+            <!-- 我方信息 -->
+            <div class="player-info-bar">
+                <div>
+                    <span class="player-name" id="player-name" onclick="openNameEditor('player')">我方</span>
+                    <div class="lp-display-bar">
+                        <span class="lp-value" id="player-lp" onclick="openLPEditor('player')">8000</span>
+                        <div class="lp-bar">
+                            <div class="lp-bar-fill" id="player-lp-bar" style="width: 100%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="hand-area">
+                    <div class="hand-cards" id="hand-cards"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：信息/工具栏 -->
+        <div class="info-sidebar">
+            <div class="sidebar-section">
+                <div class="toolbar">
+                    <button class="tool-btn secondary" onclick="openSaveLoad()">保存/读取</button>
+                    <button class="tool-btn secondary" onclick="clearField()">清空场地</button>
+                </div>
+            </div>
+            <div class="search-section">
+                <div class="search-input-container">
+                    <input type="text" class="search-input" id="search-input" placeholder="搜索卡牌..." onkeypress="if(event.key==='Enter')searchCards()">
+                    <button class="search-btn" onclick="searchCards()">搜索</button>
+                </div>
+                <div class="search-results" id="search-results"></div>
+                <div class="search-footer">数据来源：<a href="https://ygocdb.com" target="_blank">百鸽 ygocdb.com</a></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 遮罩层 -->
+    <div class="overlay" id="overlay" onclick="closeAllModals()"></div>
+
+    <!-- 自定义确认弹窗 -->
+    <div class="confirm-overlay" id="confirm-overlay">
+        <div class="confirm-dialog">
+            <p id="confirm-message"></p>
+            <div class="confirm-btns">
+                <button class="confirm-btn-cancel" id="confirm-cancel">取消</button>
+                <button class="confirm-btn-ok" id="confirm-ok">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LP编辑弹窗 -->
+    <div class="lp-editor" id="lp-editor">
+        <div class="lp-editor-title">编辑生命值</div>
+        <input type="number" class="lp-input" id="lp-input" value="8000">
+        <div class="lp-quick-btns">
+            <button class="lp-quick-btn" onclick="setLPQuick(8000)">8000</button>
+            <button class="lp-quick-btn" onclick="setLPQuick(4000)">4000</button>
+            <button class="lp-quick-btn" onclick="setLPQuick(1000)">1000</button>
+            <button class="lp-quick-btn" onclick="setLPQuick(0)">0</button>
+            <button class="lp-quick-btn" onclick="adjustLP(-1000)">-1000</button>
+            <button class="lp-quick-btn" onclick="adjustLP(1000)">+1000</button>
+        </div>
+        <button class="lp-confirm-btn" onclick="confirmLP()">确认</button>
+    </div>
+
+    <!-- 名字编辑弹窗 -->
+    <div class="lp-editor" id="name-editor">
+        <div class="lp-editor-title" id="name-editor-title">编辑名字</div>
+        <input type="text" class="lp-input" id="name-input" value="" maxlength="20">
+        <button class="lp-confirm-btn" onclick="confirmName()">确认</button>
+    </div>
+
+    <!-- 提示文本编辑弹窗 -->
+    <div class="lp-editor" id="hint-editor" style="max-width: 380px;">
+        <div class="lp-editor-title">编辑提示文本</div>
+        <div id="hint-list" style="max-height: 180px; overflow-y: auto; margin-bottom: 12px;"></div>
+        <input type="text" class="lp-input" id="hint-input" placeholder="输入提示内容..." maxlength="80" style="margin-bottom: 12px; font-size: 14px; padding: 10px;">
+        <button class="lp-confirm-btn" onclick="addHint()">添加</button>
+    </div>
+
+    <!-- 保存/加载弹窗 -->
+    <div class="save-load-modal" id="save-load-modal">
+        <div class="save-load-title">保存/读取残局</div>
+        <input type="text" class="save-name-input" id="save-name-input" placeholder="输入残局名称...">
+        <button class="lp-confirm-btn" onclick="savePuzzle()" style="margin-bottom: 16px;">保存当前残局</button>
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <button class="lp-confirm-btn" onclick="exportLua()" style="flex:1; background: rgba(255,255,255,0.15);">导出lua文件</button>
+            <button class="lp-confirm-btn" onclick="triggerImportLua()" style="flex:1; background: rgba(255,255,255,0.15);">读取lua文件</button>
+        </div>
+        <input type="file" id="lua-file-input" accept=".lua" style="display:none" onchange="importLua(event)">
+        <div class="saved-list" id="saved-list"></div>
+    </div>
+
+    <!-- 卡牌属性编辑弹窗 -->
+    <div class="lp-editor" id="card-attr-editor">
+        <div class="lp-editor-title">编辑卡牌属性</div>
+        <div class="toggle-row">
+            <span class="toggle-label">原持有者</span>
+            <div class="toggle-switch" id="card-owner-toggle" onclick="toggleSwitch(this)">
+                <div class="toggle-track">
+                    <span class="toggle-text left">我方</span>
+                    <span class="toggle-text right">对方</span>
+                </div>
+                <div class="toggle-thumb"></div>
+            </div>
+        </div>
+        <div class="toggle-row">
+            <span class="toggle-label">现持有者</span>
+            <div class="toggle-switch" id="card-controller-toggle" onclick="toggleSwitch(this)">
+                <div class="toggle-track">
+                    <span class="toggle-text left">我方</span>
+                    <span class="toggle-text right">对方</span>
+                </div>
+                <div class="toggle-thumb"></div>
+            </div>
+        </div>
+        <div id="stack-order-section" style="display:none; margin-bottom: 12px;">
+            <div style="font-size: 12px; color: #aaa; margin-bottom: 6px;">叠放顺序调整（从上到下）</div>
+            <div id="stack-order-list" style="max-height: 150px; overflow-y: auto;"></div>
+        </div>
+        <button class="lp-confirm-btn" onclick="confirmCardAttr()">确认</button>
+    </div>
+
+    <!-- 提示信息 -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // 全局状态
+        // 支持多张卡牌叠加的区域
+        function isStackableZone(zoneId) {
+            return zoneId && (
+                zoneId.includes('monster') ||
+                zoneId.includes('deck') ||
+                zoneId.includes('extra') ||
+                zoneId.includes('graveyard') ||
+                zoneId.includes('banished')
+            );
+        }
+
+        // 根据区域获取默认的owner和controller
+        function getDefaultOwnerController(zoneId) {
+            if (zoneId.startsWith('opponent-') || zoneId === 'extra-monster-r') {
+                return { owner: 1, controller: 1 };
+            }
+            return { owner: 0, controller: 0 };
+        }
+
+        let gameState = {
+            playerName: '我方',
+            opponentName: '对手',
+            playerLP: 8000,
+            opponentLP: 8000,
+            hints: [],
+            field: {},
+            hand: [],
+            opponentHand: [],
+            playerExtra: [],
+            opponentExtra: [],
+            playerGraveyard: [],
+            opponentGraveyard: [],
+            playerDeck: [],
+            opponentDeck: [],
+            playerBanished: [],
+            opponentBanished: []
+        };
+
+        let currentEditingLP = 'player';
+        let selectedCard = null;
+        let selectedZone = null;
+
+        const CARD_IMAGE_CDN = 'https://cdn.233.momobako.com/ygopro/pics/';
+
+        // 本地缓存管理
+        const CARD_CACHE_KEY = 'yugioh-card-cache';
+        const CACHE_MAX_SIZE = 500; // 最多缓存500张卡牌
+        let cardCache = new Map();
+
+        function loadCacheFromStorage() {
+            try {
+                const stored = localStorage.getItem(CARD_CACHE_KEY);
+                if (stored) {
+                    const data = JSON.parse(stored);
+                    Object.entries(data).forEach(([id, card]) => {
+                        cardCache.set(parseInt(id), card);
+                    });
+                }
+            } catch (e) {
+                console.log('缓存加载失败');
+            }
+        }
+
+        function saveCacheToStorage() {
+            try {
+                const data = {};
+                cardCache.forEach((card, id) => {
+                    data[id] = card;
+                });
+                localStorage.setItem(CARD_CACHE_KEY, JSON.stringify(data));
+            } catch (e) {
+                console.log('缓存保存失败');
+            }
+        }
+
+        function addToCache(card) {
+            if (!card || !card.id) return;
+            cardCache.set(card.id, card);
+            // 缓存超过上限时清理旧数据
+            if (cardCache.size > CACHE_MAX_SIZE) {
+                const firstKey = cardCache.keys().next().value;
+                cardCache.delete(firstKey);
+            }
+            saveCacheToStorage();
+        }
+
+        function getFromCache(cardId) {
+            return cardCache.get(cardId);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCacheFromStorage();
+            updateHintPreview();
+            renderField();
+            updateCounts();
+            initDropTargets();
+        });
+
+        // 延时工具函数
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // ===== 拖拽功能 =====
+        let dragSource = null; // { type: 'field'|'hand'|'opponent-hand'|'search', zoneId?: string, index?: number, searchCard?: object }
+        let dragGhostEl = null;
+
+        function initDraggable(cardEl, sourceType, zoneId, index, searchCard) {
+            // 桌面端：HTML5 Drag & Drop
+            cardEl.setAttribute('draggable', 'true');
+            cardEl.addEventListener('dragstart', (e) => {
+                clearTimeout(longPressTimer);
+                dragSource = { type: sourceType, zoneId, index, searchCard };
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', '');
+                // 创建自定义拖拽幽灵，只显示卡图，保持原始尺寸
+                const img = cardEl.querySelector('img');
+                if (img) {
+                    try {
+                        const ghost = document.createElement('div');
+                        ghost.style.width = img.offsetWidth + 'px';
+                        ghost.style.height = img.offsetHeight + 'px';
+                        ghost.style.position = 'absolute';
+                        ghost.style.top = '-9999px';
+                        ghost.style.overflow = 'hidden';
+                        ghost.style.borderRadius = '3px';
+                        const ghostImg = document.createElement('img');
+                        ghostImg.src = img.src;
+                        ghostImg.style.width = '100%';
+                        ghostImg.style.height = '100%';
+                        ghostImg.style.objectFit = 'contain';
+                        ghost.appendChild(ghostImg);
+                        document.body.appendChild(ghost);
+                        e.dataTransfer.setDragImage(ghost, img.offsetWidth / 2, img.offsetHeight / 2);
+                        setTimeout(() => ghost.remove(), 0);
+                    } catch (err) {
+                        // setDragImage 不支持时使用默认行为
+                    }
+                }
+                setTimeout(() => cardEl.classList.add('dragging'), 0);
+            });
+            cardEl.addEventListener('dragend', () => {
+                cardEl.classList.remove('dragging');
+                dragSource = null;
+                clearDragOver();
+            });
+
+            // 移动端：Touch 事件
+            let touchStartX, touchStartY, isDragging = false;
+            let touchStartTimer = null;
+            let pendingDragSource = null;
+            cardEl.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                touchStartX = touch.clientX;
+                touchStartY = touch.clientY;
+                isDragging = false;
+                pendingDragSource = { type: sourceType, zoneId, index, searchCard };
+                // 搜索结果卡片延迟100ms后设置dragSource，避免误触拖拽
+                if (sourceType === 'search') {
+                    clearTimeout(touchStartTimer);
+                    touchStartTimer = setTimeout(() => {
+                        dragSource = pendingDragSource;
+                    }, 100);
+                } else {
+                    dragSource = pendingDragSource;
+                }
+            }, { passive: true });
+
+            cardEl.addEventListener('touchmove', (e) => {
+                if (!dragSource) return;
+                const touch = e.touches[0];
+                const dx = touch.clientX - touchStartX;
+                const dy = touch.clientY - touchStartY;
+                if (!isDragging && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+                    isDragging = true;
+                    clearTimeout(longPressTimer);
+                    clearTimeout(touchStartTimer);
+                    cardEl.classList.add('dragging');
+                    // 创建拖拽幽灵，只显示卡图，保持与搜索结果图片尺寸一致
+                    const img = cardEl.querySelector('img');
+                    if (img) {
+                        dragGhostEl = document.createElement('div');
+                        dragGhostEl.className = 'drag-ghost';
+                        const ghostImg = document.createElement('img');
+                        ghostImg.src = img.src;
+                        ghostImg.style.width = img.offsetWidth + 'px';
+                        ghostImg.style.height = img.offsetHeight + 'px';
+                        ghostImg.style.objectFit = 'contain';
+                        ghostImg.style.borderRadius = '3px';
+                        dragGhostEl.style.width = img.offsetWidth + 'px';
+                        dragGhostEl.style.height = img.offsetHeight + 'px';
+                        dragGhostEl.appendChild(ghostImg);
+                    } else {
+                        dragGhostEl = cardEl.cloneNode(true);
+                        dragGhostEl.className = 'drag-ghost';
+                        dragGhostEl.style.width = cardEl.offsetWidth + 'px';
+                        dragGhostEl.style.height = cardEl.offsetHeight + 'px';
+                    }
+                    document.body.appendChild(dragGhostEl);
+                }
+                if (isDragging && dragGhostEl) {
+                    e.preventDefault();
+                    dragGhostEl.style.left = (touch.clientX - cardEl.offsetWidth / 2) + 'px';
+                    dragGhostEl.style.top = (touch.clientY - cardEl.offsetHeight / 2) + 'px';
+                    // 高亮目标区域
+                    highlightDropTarget(touch.clientX, touch.clientY);
+                }
+            }, { passive: false });
+
+            cardEl.addEventListener('touchend', (e) => {
+                cardEl.classList.remove('dragging');
+                clearTimeout(touchStartTimer);
+                if (isDragging && dragGhostEl) {
+                    const touch = e.changedTouches[0];
+                    handleDrop(touch.clientX, touch.clientY);
+                    dragGhostEl.remove();
+                    dragGhostEl = null;
+                }
+                isDragging = false;
+                dragSource = null;
+                pendingDragSource = null;
+                clearDragOver();
+            });
+        }
+
+        function highlightDropTarget(x, y) {
+            clearDragOver();
+            const el = document.elementFromPoint(x, y);
+            if (!el) return;
+            const zone = el.closest('.field-zone, .side-zone, .hand-area, .info-sidebar');
+            if (zone) zone.classList.add('drag-over');
+        }
+
+        function clearDragOver() {
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        }
+
+        function handleDrop(x, y) {
+            const el = document.elementFromPoint(x, y);
+            if (!el || !dragSource) return;
+            const zone = el.closest('.field-zone, .side-zone, .hand-area, .info-sidebar');
+            if (!zone) return;
+            executeDrop(zone);
+        }
+
+        function executeDrop(targetZone) {
+            if (!dragSource) return;
+
+            // 获取源卡牌数据
+            let sourceCard = null;
+            if (dragSource.type === 'search') {
+                sourceCard = dragSource.searchCard;
+            } else if (dragSource.type === 'field') {
+                const zoneData = gameState.field[dragSource.zoneId];
+                sourceCard = Array.isArray(zoneData) ? zoneData[zoneData.length - 1] : zoneData;
+            } else if (dragSource.type === 'hand') {
+                sourceCard = gameState.hand[dragSource.index];
+            } else if (dragSource.type === 'opponent-hand') {
+                sourceCard = gameState.opponentHand[dragSource.index];
+            }
+            if (!sourceCard) return;
+
+            // 判断目标区域类型
+            const targetZoneId = targetZone.dataset?.zone;
+            const isTargetHandArea = targetZone.classList.contains('hand-area');
+            const isTargetSearchArea = targetZone.id === 'search-results' || targetZone.closest('#search-results') || targetZone.classList.contains('info-sidebar');
+            // hand-area 的 id 在子元素 .hand-cards 上
+            const handCardsId = targetZone.querySelector('.hand-cards')?.id;
+            const isTargetPlayerHand = isTargetHandArea && handCardsId === 'hand-cards';
+            const isTargetOpponentHand = isTargetHandArea && handCardsId === 'opponent-hand-cards';
+
+            if (isTargetSearchArea) {
+                // 拖回搜索结果区：执行移除
+                if (dragSource.type !== 'search') {
+                    removeCardFromSource();
+                    renderField();
+                    renderHand();
+                    renderOpponentHand();
+                    showToast('卡牌已移除');
+                }
+            } else if (isTargetPlayerHand) {
+                // 拖到手牌区
+                if (dragSource.type !== 'search') removeCardFromSource();
+                const cardData = { ...sourceCard, position: 'atk', faceUp: true, owner: 0, controller: 0, overlay: [] };
+                gameState.hand.push(cardData);
+                renderField();
+                renderHand();
+                showToast('卡牌已移至手牌');
+            } else if (isTargetOpponentHand) {
+                // 拖到对手手牌区
+                if (dragSource.type !== 'search') removeCardFromSource();
+                const cardData = { ...sourceCard, position: 'atk', faceUp: true, owner: 1, controller: 1, overlay: [] };
+                gameState.opponentHand.push(cardData);
+                renderField();
+                renderOpponentHand();
+                showToast('卡牌已移至对手手牌');
+            } else if (targetZoneId) {
+                // 拖到场地格子（field-zone 或 side-zone）
+                if (dragSource.type !== 'search') removeCardFromSource();
+                // 场地、除外、墓地格子重置为表侧攻击表示
+                const isResetZone = targetZoneId.includes('field') || targetZoneId.includes('banished') || targetZoneId.includes('graveyard');
+                const isMonsterZone = targetZoneId.includes('monster');
+                const cardData = {
+                    ...sourceCard,
+                    position: 'atk',
+                    faceUp: isResetZone || isMonsterZone ? true : false,
+                    overlay: []
+                };
+                placeToField(cardData, targetZoneId);
+                renderHand();
+                renderOpponentHand();
+                showToast('卡牌放置成功');
+            }
+        }
+
+        function removeCardFromSource() {
+            if (!dragSource) return;
+            if (dragSource.type === 'field') {
+                const zoneData = gameState.field[dragSource.zoneId];
+                if (Array.isArray(zoneData)) {
+                    zoneData.pop(); // 移除最上面一张
+                    if (zoneData.length === 0) {
+                        delete gameState.field[dragSource.zoneId];
+                    } else if (zoneData.length === 1) {
+                        gameState.field[dragSource.zoneId] = zoneData[0]; // 只剩一张时转为单卡
+                    }
+                } else {
+                    delete gameState.field[dragSource.zoneId];
+                }
+            } else if (dragSource.type === 'hand') {
+                gameState.hand.splice(dragSource.index, 1);
+            } else if (dragSource.type === 'opponent-hand') {
+                gameState.opponentHand.splice(dragSource.index, 1);
+            }
+        }
+
+        // 初始化拖放目标区域的事件
+        function initDropTargets() {
+            // 场地格子
+            document.querySelectorAll('.field-zone, .side-zone').forEach(zone => {
+                zone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    zone.classList.add('drag-over');
+                });
+                zone.addEventListener('dragleave', () => {
+                    zone.classList.remove('drag-over');
+                });
+                zone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('drag-over');
+                    executeDrop(zone);
+                });
+            });
+
+            // 手牌区域
+            document.querySelectorAll('.hand-area').forEach(area => {
+                area.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    area.classList.add('drag-over');
+                });
+                area.addEventListener('dragleave', () => {
+                    area.classList.remove('drag-over');
+                });
+                area.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    area.classList.remove('drag-over');
+                    executeDrop(area);
+                });
+            });
+
+            // 右侧信息栏（拖放至此执行移除）
+            const infoSidebar = document.querySelector('.info-sidebar');
+            if (infoSidebar) {
+                infoSidebar.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    infoSidebar.classList.add('drag-over');
+                });
+                infoSidebar.addEventListener('dragleave', (e) => {
+                    if (!infoSidebar.contains(e.relatedTarget)) {
+                        infoSidebar.classList.remove('drag-over');
+                    }
+                });
+                infoSidebar.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    infoSidebar.classList.remove('drag-over');
+                    executeDrop(infoSidebar);
+                });
+            }
+        }
+
+        async function searchCards() {
+            const query = document.getElementById('search-input').value.trim();
+            if (!query) return;
+
+            const resultsContainer = document.getElementById('search-results');
+            resultsContainer.innerHTML = '<div style="text-align:center;color:#888;padding:20px;font-size:11px;">搜索中...</div>';
+
+            try {
+                const response = await fetch(`https://ygocdb.com/api/v0/?search=:${encodeURIComponent(query)}`);
+                const data = await response.json();
+                resultsContainer.innerHTML = '';
+
+                if (data.result && data.result.length > 0) {
+                    for (let i = 0; i < data.result.length; i++) {
+                        const card = data.result[i];
+                        addToCache(card);
+
+                        const cardEl = document.createElement('div');
+                        cardEl.className = 'result-card';
+
+                        const types = card.text?.types || '';
+                        const cardName = card.cn_name || card.sc_name || card.name;
+
+                        cardEl.innerHTML = `
+                            <img class="result-card-img" src="${CARD_IMAGE_CDN}${card.id}.jpg!thumb2" alt="${cardName}" onerror="this.style.display='none'">
+                            <div class="result-card-info">
+                                <div class="result-card-name">${cardName}</div>
+                                <div class="result-card-type">${types}</div>
+                            </div>
+                        `;
+
+                        // 支持拖放到场地和悬停查看详情
+                        initDraggable(cardEl, 'search', null, null, card);
+                        bindCardHover(cardEl, card, 'search', null, null);
+                        resultsContainer.appendChild(cardEl);
+                    }
+                } else {
+                    resultsContainer.innerHTML = '<div style="text-align:center;color:#888;padding:20px;font-size:11px;">未找到卡牌</div>';
+                }
+            } catch (error) {
+                resultsContainer.innerHTML = '<div style="text-align:center;color:#e94560;padding:20px;font-size:11px;">搜索失败，请重试</div>';
+            }
+        }
+
+        // 长按编辑卡牌属性
+        let longPressTimer = null;
+        let editingCardZoneId = null;
+        let editingCardIndex = null; // null表示单卡，数字表示数组索引
+
+        function bindLongPress(el, zoneId, index) {
+            const startLongPress = (e) => {
+                // 防止右键菜单
+                if (e.type === 'contextmenu') {
+                    e.preventDefault();
+                    return;
+                }
+                clearTimeout(longPressTimer);
+                longPressTimer = setTimeout(() => {
+                    openCardAttrEditor(zoneId, index);
+                }, 600);
+            };
+            const cancelLongPress = () => {
+                clearTimeout(longPressTimer);
+            };
+
+            el.addEventListener('mousedown', startLongPress);
+            el.addEventListener('touchstart', startLongPress, { passive: true });
+            el.addEventListener('mouseup', cancelLongPress);
+            el.addEventListener('mouseleave', cancelLongPress);
+            el.addEventListener('touchend', cancelLongPress);
+            el.addEventListener('touchmove', cancelLongPress);
+            el.addEventListener('contextmenu', (e) => { e.preventDefault(); startLongPress(e); });
+        }
+
+        function toggleSwitch(el) {
+            el.classList.toggle('active');
+        }
+
+        function setToggleState(el, isActive) {
+            if (isActive) el.classList.add('active');
+            else el.classList.remove('active');
+        }
+
+        function getToggleValue(el) {
+            return el.classList.contains('active') ? 1 : 0;
+        }
+
+        function openCardAttrEditor(zoneId, index) {
+            const zoneData = gameState.field[zoneId];
+            if (!zoneData) return;
+            let card;
+            if (Array.isArray(zoneData)) {
+                card = index !== null ? zoneData[index] : zoneData[zoneData.length - 1];
+            } else {
+                card = zoneData;
+            }
+            if (!card) return;
+
+            editingCardZoneId = zoneId;
+            editingCardIndex = index;
+            setToggleState(document.getElementById('card-owner-toggle'), card.owner === 1);
+            setToggleState(document.getElementById('card-controller-toggle'), card.controller === 1);
+
+            // 叠放顺序调整
+            const stackSection = document.getElementById('stack-order-section');
+            const stackList = document.getElementById('stack-order-list');
+            if (Array.isArray(zoneData) && zoneData.length > 1) {
+                stackSection.style.display = 'block';
+                renderStackOrderList(zoneData);
+            } else {
+                stackSection.style.display = 'none';
+                stackList.innerHTML = '';
+            }
+
+            document.getElementById('card-attr-editor').classList.add('show');
+            document.getElementById('overlay').classList.add('show');
+        }
+
+        function renderStackOrderList(cards) {
+            const list = document.getElementById('stack-order-list');
+            list.innerHTML = '';
+            // 倒序遍历：数组最后一个是最顶层，显示为第1张
+            for (let displayIdx = 0; displayIdx < cards.length; displayIdx++) {
+                const arrIdx = cards.length - 1 - displayIdx;
+                const card = cards[arrIdx];
+                const item = document.createElement('div');
+                item.className = 'stack-order-item';
+                // ▲ 表示向数组尾部移动（更靠近顶层），▼ 表示向数组头部移动（更靠近底层）
+                item.innerHTML = `
+                    <span class="stack-order-name">${displayIdx + 1}. ${card.cn_name || card.name || card.id}</span>
+                    <div class="stack-order-btns">
+                        <button onclick="moveStackCard(${arrIdx}, 1)" ${arrIdx === cards.length - 1 ? 'disabled' : ''}>▲</button>
+                        <button onclick="moveStackCard(${arrIdx}, -1)" ${arrIdx === 0 ? 'disabled' : ''}>▼</button>
+                    </div>
+                `;
+                list.appendChild(item);
+            }
+        }
+
+        function moveStackCard(fromIndex, direction) {
+            const zoneData = gameState.field[editingCardZoneId];
+            if (!Array.isArray(zoneData)) return;
+            const toIndex = fromIndex + direction;
+            if (toIndex < 0 || toIndex >= zoneData.length) return;
+            // 交换位置
+            [zoneData[fromIndex], zoneData[toIndex]] = [zoneData[toIndex], zoneData[fromIndex]];
+            // 更新当前编辑索引
+            if (editingCardIndex === fromIndex) editingCardIndex = toIndex;
+            else if (editingCardIndex === toIndex) editingCardIndex = fromIndex;
+            renderStackOrderList(zoneData);
+            renderField();
+        }
+
+        function confirmCardAttr() {
+            if (!editingCardZoneId) return;
+            const owner = getToggleValue(document.getElementById('card-owner-toggle'));
+            const controller = getToggleValue(document.getElementById('card-controller-toggle'));
+            const zoneData = gameState.field[editingCardZoneId];
+            if (zoneData) {
+                if (Array.isArray(zoneData)) {
+                    const idx = editingCardIndex !== null ? editingCardIndex : zoneData.length - 1;
+                    if (zoneData[idx]) {
+                        zoneData[idx].owner = owner;
+                        zoneData[idx].controller = controller;
+                    }
+                } else {
+                    zoneData.owner = owner;
+                    zoneData.controller = controller;
+                }
+            }
+            closeAllModals();
+            renderField();
+            showToast('卡牌属性已更新');
+        }
+
+        function selectCardForPlacement(card) {
+            selectedCard = card;
+            showCardDetail(card, true);
+        }
+
+        // 悬停计时器
+        let hoverTimer = null;
+        let hoveredCard = null;
+
+        function updateDetailPanel(card) {
+            if (!card) {
+                document.getElementById('detail-panel-image').innerHTML = '<span class="detail-panel-placeholder">悬停卡牌查看详情</span>';
+                document.getElementById('detail-panel-name').textContent = '';
+                document.getElementById('detail-panel-type').textContent = '';
+                document.getElementById('detail-panel-desc').textContent = '';
+                return;
+            }
+
+            document.getElementById('detail-panel-image').innerHTML = `
+                <img src="${CARD_IMAGE_CDN}${card.id}.jpg" alt="${card.cn_name}" onerror="this.parentElement.innerHTML='<span class=\\'detail-panel-placeholder\\'>图片加载失败</span>'">
+            `;
+            document.getElementById('detail-panel-name').textContent = card.cn_name || card.sc_name || card.name || '未知卡牌';
+            document.getElementById('detail-panel-type').textContent = card.text?.types || '';
+            document.getElementById('detail-panel-desc').textContent = card.text?.desc || card.desc || '';
+        }
+
+        function bindCardHover(el, card, sourceType, zoneId, index) {
+            el.addEventListener('mouseenter', () => {
+                clearTimeout(hoverTimer);
+                hoverTimer = setTimeout(() => {
+                    hoveredCard = card;
+                    selectedZone = zoneId;
+                    updateDetailPanel(card);
+                }, 500);
+            });
+
+            el.addEventListener('mouseleave', () => {
+                clearTimeout(hoverTimer);
+            });
+        }
+
+        function showCardDetail(card, isPlacement = false) {
+            updateDetailPanel(card);
+        }
+
+        function placeCard(card, zoneType) {
+            // 判断是否为怪兽区域
+            const isMonsterZone = zoneType === 'monster' || zoneType === 'extra-monster';
+            const isHand = zoneType === 'hand' || zoneType === 'opponent-hand';
+            const cardData = {
+                ...card,
+                position: 'atk',
+                faceUp: isMonsterZone || isHand ? true : false,
+                overlay: []
+            };
+
+            switch (zoneType) {
+                case 'hand':
+                    gameState.hand.push({ ...cardData, owner: 0, controller: 0 });
+                    renderHand();
+                    break;
+                case 'opponent-hand':
+                    gameState.opponentHand.push({ ...cardData, owner: 1, controller: 1 });
+                    renderOpponentHand();
+                    break;
+                case 'extra':
+                    placeToField(cardData, 'player-extra');
+                    break;
+                case 'graveyard':
+                    placeToField(cardData, 'player-graveyard');
+                    showToast('卡牌已放入墓地');
+                    break;
+                case 'banished':
+                    placeToField(cardData, 'player-banished');
+                    showToast('卡牌已除外');
+                    break;
+                case 'extra-monster':
+                    // 额外怪兽区支持叠加
+                    placeToField(cardData, 'extra-monster-l');
+                    break;
+                default:
+                    // 怪兽区支持叠加，魔陷区不支持
+                    const actualType = zoneType === 'st' ? 's-t' : zoneType;
+                    const prefix = 'player-' + actualType;
+                    if (zoneType === 'monster') {
+                        // 怪兽区：放入第一个格子并叠加
+                        placeToField(cardData, prefix + '-0');
+                    } else {
+                        // 魔陷区：找空位
+                        let placed = false;
+                        for (let i = 0; i < 5; i++) {
+                            const zoneId = prefix + '-' + i;
+                            if (!gameState.field[zoneId]) {
+                                gameState.field[zoneId] = cardData;
+                                placed = true;
+                                break;
+                            }
+                        }
+                        if (!placed) {
+                            showToast('没有空位了');
+                            return;
+                        }
+                        renderField();
+                    }
+            }
+
+            closeAllModals();
+            showToast('卡牌放置成功');
+        }
+
+        // 放置卡牌到场地，支持叠加
+        function placeToField(cardData, zoneId) {
+            const defaults = getDefaultOwnerController(zoneId);
+            const finalCard = {
+                owner: defaults.owner,
+                controller: defaults.controller,
+                ...cardData
+            };
+            if (isStackableZone(zoneId)) {
+                // 叠加区域：放入数组
+                if (!gameState.field[zoneId]) {
+                    gameState.field[zoneId] = [];
+                }
+                if (Array.isArray(gameState.field[zoneId])) {
+                    gameState.field[zoneId].push(finalCard);
+                } else {
+                    // 兼容旧数据（单张卡牌）
+                    gameState.field[zoneId] = [gameState.field[zoneId], finalCard];
+                }
+            } else {
+                // 非叠加区域：直接赋值
+                gameState.field[zoneId] = finalCard;
+            }
+            renderField();
+        }
+
+        function onZoneClick(zone) {
+            const zoneId = zone.dataset.zone;
+            const zoneData = gameState.field[zoneId];
+            const card = Array.isArray(zoneData) ? zoneData[zoneData.length - 1] : zoneData;
+
+            if (card) {
+                selectedZone = zoneId;
+                cycleCardState(card, zoneId);
+            } else if (selectedCard) {
+                const isMonsterZone = zoneId.includes('monster');
+                const cardData = {
+                    ...selectedCard,
+                    position: isMonsterZone ? 'atk' : 'atk',
+                    faceUp: isMonsterZone ? true : false
+                };
+                placeToField(cardData, zoneId);
+                selectedCard = null;
+                showToast('卡牌放置成功');
+            }
+        }
+
+        function onSideZoneClick(el) {
+            const zoneId = el.dataset.zone;
+            const zoneData = gameState.field[zoneId];
+            const card = Array.isArray(zoneData) ? zoneData[zoneData.length - 1] : zoneData;
+
+            if (card) {
+                selectedZone = zoneId;
+                cycleCardState(card, zoneId);
+            } else if (selectedCard) {
+                const cardData = {
+                    ...selectedCard,
+                    position: 'atk',
+                    faceUp: false
+                };
+                placeToField(cardData, zoneId);
+                selectedCard = null;
+                showToast('卡牌放置成功');
+            }
+        }
+
+        // 点击场上卡牌时轮流切换状态
+        // 怪兽区：表侧攻击 → 表侧守备 → 里侧守备 → 里侧攻击 → 表侧攻击
+        // 其他区：表侧 → 里侧 → 表侧
+        function cycleCardState(card, zoneId) {
+            const isMonsterZone = zoneId.includes('monster');
+
+            if (isMonsterZone) {
+                if (card.faceUp && card.position === 'atk') {
+                    card.position = 'def'; // 表侧守备
+                } else if (card.faceUp && card.position === 'def') {
+                    card.faceUp = false; // 里侧守备
+                    card.position = 'def';
+                } else {
+                    card.faceUp = true; // 表侧攻击
+                    card.position = 'atk';
+                }
+            } else {
+                card.faceUp = !card.faceUp; // 表侧 ↔ 里侧
+            }
+
+            renderField();
+            updateDetailPanel(card);
+        }
+
+        function renderField() {
+            // 渲染 field-zone（主区域格子）
+            document.querySelectorAll('.field-zone').forEach(zone => {
+                const zoneId = zone.dataset.zone;
+                const zoneData = gameState.field[zoneId];
+                // 叠加区域取最上面一张
+                const card = Array.isArray(zoneData) ? zoneData[zoneData.length - 1] : zoneData;
+                const stackCount = Array.isArray(zoneData) ? zoneData.length : (zoneData ? 1 : 0);
+
+                if (card) {
+                    zone.classList.add('occupied');
+
+                    // 判断是否需要旋转（表侧守备或里侧守备，或对方控制）
+                    const isDef = card.position === 'def';
+                    const isOpponentCtrl = card.controller === 1;
+                    const cardClass = 'card' + (isDef ? ' def-position' : '') + (isOpponentCtrl ? ' opponent-ctrl' : '');
+
+                    // 叠加数量徽章
+                    const countBadge = stackCount > 1 ? `<div class="stack-count">${stackCount}</div>` : '';
+
+                    // 卡牌名称放在field-zone层级，不受card旋转影响
+                    const nameOverlay = `<div class="card-name-overlay">${card.cn_name || card.name}</div>`;
+
+                    zone.innerHTML = `
+                        <div class="${cardClass}">
+                            ${card.faceUp ? `
+                                <img src="${CARD_IMAGE_CDN}${card.id}.jpg!thumb2" alt="${card.cn_name}" onerror="this.parentElement.innerHTML='<div class=\\'card-back\\'><span>?</span></div>'">
+                            ` : `<img class="card-back-img" src="https://cdn.233.momobako.com/ygopro/pics/0.jpg!thumb2" alt="卡背" onerror="this.parentElement.innerHTML='<div class=\'card-back\'><span>?</span></div>'">`}
+                        </div>
+                        ${countBadge}
+                        ${nameOverlay}
+                    `;
+                    // 初始化卡牌拖拽、悬停详情和长按编辑
+                    const cardEl = zone.querySelector('.card');
+                    if (cardEl) {
+                        initDraggable(cardEl, 'field', zoneId, null);
+                        bindCardHover(cardEl, card, 'field', zoneId, null);
+                    }
+                    bindLongPress(zone, zoneId, null);
+                } else {
+                    zone.classList.remove('occupied');
+                    let label = '';
+                    if (zoneId.includes('extra-monster')) {
+                        label = '额外怪兽';
+                    } else if (zoneId.includes('monster')) {
+                        label = '怪兽';
+                    } else if (zoneId.includes('s-t')) {
+                        // 最外侧魔陷区显示"魔陷/灵摆"，中间显示"魔陷"
+                        const idx = parseInt(zoneId.split('-').pop());
+                        label = (idx === 0 || idx === 4) ? '魔陷/灵摆' : '魔陷';
+                    } else if (zoneId.includes('field')) {
+                        label = '场地';
+                    }
+                    zone.innerHTML = label ? `<span class="zone-label">${label}</span>` : '';
+                }
+            });
+
+            // 渲染 side-zone（侧区：卡组、额外、墓地、除外）
+            document.querySelectorAll('.side-zone').forEach(zone => {
+                const zoneId = zone.dataset.zone;
+                const zoneData = gameState.field[zoneId];
+                // 叠加区域取最上面一张
+                const card = Array.isArray(zoneData) ? zoneData[zoneData.length - 1] : zoneData;
+                const stackCount = Array.isArray(zoneData) ? zoneData.length : (zoneData ? 1 : 0);
+
+                if (card) {
+                    zone.classList.add('occupied');
+
+                    // 叠加数量徽章
+                    const countBadge = stackCount > 1 ? `<div class="stack-count">${stackCount}</div>` : '';
+
+                    const sideCardClass = 'card' + (card.controller === 1 ? ' opponent-ctrl' : '');
+                    zone.innerHTML = `
+                        <div class="${sideCardClass}">
+                            ${card.faceUp ? `
+                                <img src="${CARD_IMAGE_CDN}${card.id}.jpg!thumb2" alt="${card.cn_name}" onerror="this.parentElement.innerHTML='<div class=\\'card-back\\'><span>?</span></div>'">
+                            ` : `<img class="card-back-img" src="https://cdn.233.momobako.com/ygopro/pics/0.jpg!thumb2" alt="卡背" onerror="this.parentElement.innerHTML='<div class=\'card-back\'><span>?</span></div>'">`}
+                        </div>
+                        ${countBadge}
+                        <div class="card-name-overlay">${card.cn_name || card.name}</div>
+                    `;
+                    // 初始化卡牌拖拽、悬停详情和长按编辑
+                    const cardEl = zone.querySelector('.card');
+                    if (cardEl) {
+                        initDraggable(cardEl, 'field', zoneId, null);
+                        bindCardHover(cardEl, card, 'field', zoneId, null);
+                    }
+                    bindLongPress(zone, zoneId, null);
+                } else {
+                    zone.classList.remove('occupied');
+                    // 恢复默认文本
+                    const defaultLabels = {
+                        'opponent-deck': '卡组', 'opponent-extra': '额外卡组', 'opponent-graveyard': '墓地', 'opponent-banished': '除外', 'opponent-field': '场地',
+                        'player-deck': '卡组', 'player-extra': '额外卡组', 'player-graveyard': '墓地', 'player-banished': '除外', 'player-field': '场地'
+                    };
+                    const label = defaultLabels[zoneId] || '';
+                    zone.innerHTML = label ? `<span class="zone-label">${label}</span>` : '';
+                }
+            });
+        }
+
+        function renderHand() {
+            const c = document.getElementById('hand-cards');
+            c.innerHTML = '';
+            gameState.hand.forEach((card, index) => {
+                const el = document.createElement('div');
+                el.className = 'hand-card';
+                el.innerHTML = `<img src="${CARD_IMAGE_CDN}${card.id}.jpg!thumb2" alt="${card.cn_name}" onerror="this.style.display='none'; this.parentElement.style.background='linear-gradient(135deg, #2d1b69, #1a0f3c)'">`;
+                el.onclick = () => showCardDetail(card, false);
+                initDraggable(el, 'hand', null, index);
+                bindCardHover(el, card, 'hand', null, index);
+                c.appendChild(el);
+            });
+            updateCounts();
+        }
+
+        function renderOpponentHand() {
+            const c = document.getElementById('opponent-hand-cards');
+            c.innerHTML = '';
+            gameState.opponentHand.forEach((card, index) => {
+                const el = document.createElement('div');
+                el.className = 'hand-card';
+                el.innerHTML = `<img src="${CARD_IMAGE_CDN}${card.id}.jpg!thumb2" alt="${card.cn_name}" onerror="this.style.display='none'; this.parentElement.style.background='linear-gradient(135deg, #2d1b69, #1a0f3c)'">`;
+                el.onclick = () => showCardDetail(card, false);
+                initDraggable(el, 'opponent-hand', null, index);
+                bindCardHover(el, card, 'opponent-hand', null, index);
+                c.appendChild(el);
+            });
+            updateCounts();
+        }
+
+        function updateCounts() {
+            const playerLPPercent = Math.min(100, (gameState.playerLP / 8000) * 100);
+            const opponentLPPercent = Math.min(100, (gameState.opponentLP / 8000) * 100);
+            document.getElementById('player-lp-bar').style.width = playerLPPercent + '%';
+            document.getElementById('opponent-lp-bar').style.width = opponentLPPercent + '%';
+        }
+
+        let currentEditingName = 'player';
+
+        function openLPEditor(player) {
+            currentEditingLP = player;
+            document.getElementById('lp-input').value = player === 'player' ? gameState.playerLP : gameState.opponentLP;
+            document.getElementById('lp-editor').classList.add('show');
+            document.getElementById('overlay').classList.add('show');
+        }
+
+        function openNameEditor(player) {
+            currentEditingName = player;
+            const currentName = player === 'player' ? gameState.playerName : gameState.opponentName;
+            document.getElementById('name-input').value = currentName;
+            document.getElementById('name-editor-title').textContent = '编辑' + (player === 'player' ? '我方' : '对手') + '名字';
+            document.getElementById('name-editor').classList.add('show');
+            document.getElementById('overlay').classList.add('show');
+        }
+
+        function setLPQuick(value) { document.getElementById('lp-input').value = value; }
+        function adjustLP(delta) { document.getElementById('lp-input').value = parseInt(document.getElementById('lp-input').value) + delta; }
+
+        function confirmLP() {
+            const value = parseInt(document.getElementById('lp-input').value) || 0;
+            if (currentEditingLP === 'player') {
+                gameState.playerLP = value;
+                document.getElementById('player-lp').textContent = value;
+            } else {
+                gameState.opponentLP = value;
+                document.getElementById('opponent-lp').textContent = value;
+            }
+            updateCounts();
+            closeAllModals();
+            showToast('生命值已更新');
+        }
+
+        function confirmName() {
+            const value = document.getElementById('name-input').value.trim();
+            if (!value) {
+                showToast('名字不能为空');
+                return;
+            }
+            if (currentEditingName === 'player') {
+                gameState.playerName = value;
+                document.getElementById('player-name').textContent = value;
+            } else {
+                gameState.opponentName = value;
+                document.getElementById('opponent-name').textContent = value;
+            }
+            closeAllModals();
+            showToast('名字已更新');
+        }
+
+        function openHintEditor() {
+            document.getElementById('hint-input').value = '';
+            renderHintList();
+            document.getElementById('hint-editor').classList.add('show');
+            document.getElementById('overlay').classList.add('show');
+        }
+
+        let editingHintIndex = null;
+
+        function renderHintList() {
+            const list = document.getElementById('hint-list');
+            if (!gameState.hints || gameState.hints.length === 0) {
+                list.innerHTML = '<div style="text-align:center;color:#888;font-size:12px;padding:10px;">暂无提示</div>';
+                return;
+            }
+            list.innerHTML = '';
+            gameState.hints.forEach((hint, i) => {
+                const item = document.createElement('div');
+                item.className = 'stack-order-item';
+                item.style.cursor = 'pointer';
+                item.onclick = (e) => {
+                    if (e.target.tagName === 'BUTTON') return;
+                    startEditHint(i);
+                };
+                item.innerHTML = `
+                    <span class="stack-order-name" style="flex: 1;">${i + 1}. ${hint}</span>
+                    <div class="stack-order-btns">
+                        <button onclick="removeHint(${i})" title="删除">&times;</button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function startEditHint(index) {
+            editingHintIndex = index;
+            document.getElementById('hint-input').value = gameState.hints[index];
+            document.querySelector('#hint-editor .lp-confirm-btn').textContent = '保存';
+        }
+
+        function addHint() {
+            const input = document.getElementById('hint-input');
+            const value = input.value.trim();
+            if (!value) return;
+
+            if (editingHintIndex !== null) {
+                // 保存编辑
+                gameState.hints[editingHintIndex] = value;
+                editingHintIndex = null;
+                document.querySelector('#hint-editor .lp-confirm-btn').textContent = '添加';
+            } else {
+                // 新增
+                if (!gameState.hints) gameState.hints = [];
+                gameState.hints.push(value);
+            }
+
+            input.value = '';
+            renderHintList();
+            updateHintPreview();
+        }
+
+        function removeHint(index) {
+            if (!gameState.hints) return;
+            gameState.hints.splice(index, 1);
+            renderHintList();
+            updateHintPreview();
+        }
+
+        function confirmHint() {
+            updateHintPreview();
+            closeAllModals();
+            showToast('提示文本已更新');
+        }
+
+        function updateHintPreview() {
+            const preview = document.getElementById('hint-preview');
+            if (gameState.hints && gameState.hints.length > 0) {
+                preview.textContent = gameState.hints.length + '条提示';
+                preview.style.display = 'block';
+            } else {
+                preview.style.display = 'none';
+            }
+        }
+
+        function openSaveLoad() {
+            document.getElementById('save-load-modal').classList.add('show');
+            document.getElementById('overlay').classList.add('show');
+            renderSavedList();
+        }
+
+        function savePuzzle() {
+            const name = document.getElementById('save-name-input').value.trim();
+            if (!name) { showToast('请输入残局名称'); return; }
+
+            const saves = JSON.parse(localStorage.getItem('yugioh-puzzles') || '[]');
+            const idx = saves.findIndex(s => s.name === name);
+            const data = { name, date: new Date().toLocaleString(), state: JSON.parse(JSON.stringify(gameState)) };
+
+            if (idx >= 0) saves[idx] = data; else saves.push(data);
+
+            localStorage.setItem('yugioh-puzzles', JSON.stringify(saves));
+            showToast('残局已保存');
+            document.getElementById('save-name-input').value = '';
+            renderSavedList();
+        }
+
+        function renderSavedList() {
+            const list = document.getElementById('saved-list');
+            const saves = JSON.parse(localStorage.getItem('yugioh-puzzles') || '[]');
+            list.innerHTML = '';
+
+            saves.forEach((save, i) => {
+                const item = document.createElement('div');
+                item.className = 'saved-item';
+                item.innerHTML = `<div><div class="saved-item-name">${save.name}</div><div class="saved-item-date">${save.date}</div></div><button class="saved-item-delete" onclick="event.stopPropagation(); deletePuzzle(${i})">&times;</button>`;
+                item.onclick = () => loadPuzzle(i);
+                list.appendChild(item);
+            });
+
+            if (!saves.length) list.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">暂无保存的残局</div>';
+        }
+
+        function loadPuzzle(index) {
+            const saves = JSON.parse(localStorage.getItem('yugioh-puzzles') || '[]');
+            if (saves[index]) {
+                gameState = JSON.parse(JSON.stringify(saves[index].state));
+                updateDisplay();
+                updateHintPreview();
+                renderField();
+                renderHand();
+                renderOpponentHand();
+                updateCounts();
+                closeAllModals();
+                showToast('残局已加载');
+            }
+        }
+
+        function deletePuzzle(index) {
+            const saves = JSON.parse(localStorage.getItem('yugioh-puzzles') || '[]');
+            saves.splice(index, 1);
+            localStorage.setItem('yugioh-puzzles', JSON.stringify(saves));
+            renderSavedList();
+            showToast('残局已删除');
+        }
+
+        function exportLua() {
+            const lines = [];
+            lines.push('--[[message');
+            lines.push('游戏王残局');
+            lines.push(']]');
+            lines.push(`Debug.SetAIName("${gameState.opponentName || 'AI'}")`);
+            lines.push('Debug.ReloadFieldBegin(DUEL_ATTACK_FIRST_TURN+DUEL_SIMPLE_AI,5)');
+            lines.push(`Debug.SetPlayerInfo(0,${gameState.playerLP},0,0)`);
+            lines.push(`Debug.SetPlayerInfo(1,${gameState.opponentLP},0,0)`);
+
+            // 按区域分组收集卡牌
+            const zoneGroups = {};
+            for (const [zoneId, zoneData] of Object.entries(gameState.field)) {
+                const cards = Array.isArray(zoneData) ? zoneData : [zoneData];
+                const category = getZoneCategory(zoneId);
+                if (!category) continue;
+                if (!zoneGroups[category]) zoneGroups[category] = [];
+                cards.forEach((card, seq) => {
+                    const parsed = parseZoneToLua(zoneId, card, seq);
+                    if (parsed) zoneGroups[category].push(parsed);
+                });
+            }
+
+            // 手牌也按区域分组
+            gameState.hand.forEach((card, i) => {
+                const cardName = card.cn_name || card.name || card.id;
+                const parsed = `Debug.AddCard(${card.id},${card.owner !== undefined ? card.owner : 0},${card.controller !== undefined ? card.controller : 0},LOCATION_HAND,0,POS_FACEUP_ATTACK) --${cardName}`;
+                if (!zoneGroups['player-hand']) zoneGroups['player-hand'] = [];
+                zoneGroups['player-hand'].push(parsed);
+            });
+            gameState.opponentHand.forEach((card, i) => {
+                const cardName = card.cn_name || card.name || card.id;
+                const parsed = `Debug.AddCard(${card.id},${card.owner !== undefined ? card.owner : 1},${card.controller !== undefined ? card.controller : 1},LOCATION_HAND,0,POS_FACEUP_ATTACK) --${cardName}`;
+                if (!zoneGroups['opponent-hand']) zoneGroups['opponent-hand'] = [];
+                zoneGroups['opponent-hand'].push(parsed);
+            });
+
+            // 按固定顺序输出各区域
+            const outputOrder = [
+                'player-monster', 'opponent-monster',
+                'player-st', 'opponent-st',
+                'player-hand', 'opponent-hand',
+                'player-graveyard', 'opponent-graveyard',
+                'player-banished', 'opponent-banished',
+                'player-deck', 'opponent-deck',
+                'player-extra', 'opponent-extra'
+            ];
+            for (const key of outputOrder) {
+                if (!zoneGroups[key] || zoneGroups[key].length === 0) {
+                    // 空区域也输出注释
+                    const comment = getZoneComment(key);
+                    if (comment) lines.push(comment);
+                    continue;
+                }
+                const comment = getZoneComment(key);
+                if (comment) lines.push(comment);
+                zoneGroups[key].forEach(line => lines.push(line));
+            }
+
+            lines.push('Debug.ReloadFieldEnd()');
+            if (gameState.hints && gameState.hints.length > 0) {
+                gameState.hints.forEach(h => {
+                    lines.push(`Debug.ShowHint("${h}")`);
+                });
+            }
+            lines.push('aux.BeginPuzzle()');
+            lines.push('-- created with YGOpe');
+
+            const luaContent = lines.join('\n');
+            const blob = new Blob([luaContent], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const puzzleName = document.getElementById('save-name-input').value.trim();
+            a.download = puzzleName ? puzzleName + '.lua' : 'puzzle.lua';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('lua文件已导出');
+        }
+
+        function getZoneCategory(zoneId) {
+            if (zoneId.includes('extra-monster') || (zoneId.includes('monster') && !zoneId.includes('s-t'))) return (zoneId.startsWith('opponent-') || zoneId === 'extra-monster-r') ? 'opponent-monster' : 'player-monster';
+            if (zoneId.includes('s-t') || zoneId.includes('field')) return (zoneId.startsWith('opponent-') || zoneId.includes('opponent-field')) ? 'opponent-st' : 'player-st';
+            if (zoneId.includes('graveyard')) return (zoneId.startsWith('opponent-') ? 'opponent-graveyard' : 'player-graveyard');
+            if (zoneId.includes('banished')) return (zoneId.startsWith('opponent-') ? 'opponent-banished' : 'player-banished');
+            if (zoneId.includes('deck')) return (zoneId.startsWith('opponent-') ? 'opponent-deck' : 'player-deck');
+            if (zoneId.includes('extra')) return (zoneId.startsWith('opponent-') ? 'opponent-extra' : 'player-extra');
+            return null;
+        }
+
+        function getZoneComment(key) {
+            const map = {
+                'player-monster': '--自己的怪兽区',
+                'opponent-monster': '--对方的怪兽区',
+                'player-st': '--自己的魔陷区',
+                'opponent-st': '--对方的魔陷区',
+                'player-hand': '--自己的手卡',
+                'opponent-hand': '--对方的手卡',
+                'player-graveyard': '--自己的墓地',
+                'opponent-graveyard': '--对方的墓地',
+                'player-banished': '--自己除外的卡',
+                'opponent-banished': '--对方除外的卡',
+                'player-deck': '--自己的卡组',
+                'opponent-deck': '--对方的卡组',
+                'player-extra': '--自己的额外',
+                'opponent-extra': '--对方的额外'
+            };
+            return map[key] || null;
+        }
+
+        function parseZoneToLua(zoneId, card, seq) {
+            // 解析zoneId为lua参数
+            let owner = 0, player = 0, location = '', luaSeq = 0, pos = 'POS_FACEUP_ATTACK';
+
+            owner = card.owner !== undefined ? card.owner : (zoneId.startsWith('opponent-') ? 1 : 0);
+            player = card.controller !== undefined ? card.controller : (zoneId.startsWith('opponent-') ? 1 : 0);
+
+            // 解析位置和表示形式
+            if (zoneId.includes('extra-monster-l')) {
+                location = 'LOCATION_MZONE';
+                luaSeq = 5;
+                if (card.faceUp && card.position === 'atk') pos = 'POS_FACEUP_ATTACK';
+                else if (card.faceUp && card.position === 'def') pos = 'POS_FACEUP_DEFENSE';
+                else if (!card.faceUp && card.position === 'def') pos = 'POS_FACEDOWN_DEFENSE';
+                else pos = 'POS_FACEDOWN_ATTACK';
+            } else if (zoneId.includes('extra-monster-r')) {
+                location = 'LOCATION_MZONE';
+                luaSeq = 5;
+                if (card.faceUp && card.position === 'atk') pos = 'POS_FACEUP_ATTACK';
+                else if (card.faceUp && card.position === 'def') pos = 'POS_FACEUP_DEFENSE';
+                else if (!card.faceUp && card.position === 'def') pos = 'POS_FACEDOWN_DEFENSE';
+                else pos = 'POS_FACEDOWN_ATTACK';
+            } else if (zoneId.includes('monster-')) {
+                location = 'LOCATION_MZONE';
+                luaSeq = parseInt(zoneId.split('monster-')[1]);
+                if (card.faceUp && card.position === 'atk') pos = 'POS_FACEUP_ATTACK';
+                else if (card.faceUp && card.position === 'def') pos = 'POS_FACEUP_DEFENSE';
+                else if (!card.faceUp && card.position === 'def') pos = 'POS_FACEDOWN_DEFENSE';
+                else pos = 'POS_FACEDOWN_ATTACK';
+            } else if (zoneId.includes('s-t-')) {
+                location = 'LOCATION_SZONE';
+                luaSeq = parseInt(zoneId.split('s-t-')[1]);
+                pos = card.faceUp ? 'POS_FACEUP' : 'POS_FACEDOWN';
+            } else if (zoneId.includes('field')) {
+                location = 'LOCATION_FZONE';
+                luaSeq = 0;
+                pos = card.faceUp ? 'POS_FACEUP' : 'POS_FACEDOWN';
+            } else if (zoneId.includes('deck')) {
+                location = 'LOCATION_DECK';
+                luaSeq = 0;
+                pos = 'POS_FACEDOWN';
+            } else if (zoneId.includes('extra')) {
+                location = 'LOCATION_EXTRA';
+                luaSeq = 0;
+                pos = 'POS_FACEDOWN';
+            } else if (zoneId.includes('graveyard')) {
+                location = 'LOCATION_GRAVE';
+                luaSeq = 0;
+                pos = card.faceUp ? 'POS_FACEUP' : 'POS_FACEDOWN';
+            } else if (zoneId.includes('banished')) {
+                location = 'LOCATION_REMOVED';
+                luaSeq = 0;
+                pos = card.faceUp ? 'POS_FACEUP' : 'POS_FACEDOWN';
+            } else {
+                return null; // 未知区域跳过
+            }
+
+            const cardName = card.cn_name || card.name || card.id;
+            return `Debug.AddCard(${card.id},${owner},${player},${location},${luaSeq},${pos}) --${cardName}`;
+        }
+
+        function triggerImportLua() {
+            document.getElementById('lua-file-input').click();
+        }
+
+        async function importLua(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const text = await file.text();
+            const lines = text.split('\n');
+
+            // 清空当前场地
+            gameState.field = {};
+            gameState.hand = [];
+            gameState.opponentHand = [];
+            gameState.playerExtra = [];
+            gameState.opponentExtra = [];
+            gameState.playerGraveyard = [];
+            gameState.opponentGraveyard = [];
+            gameState.playerBanished = [];
+            gameState.opponentBanished = [];
+            gameState.playerDeck = [];
+            gameState.opponentDeck = [];
+            gameState.playerLP = 8000;
+            gameState.opponentLP = 8000;
+            gameState.playerName = '我方';
+            gameState.opponentName = '对手';
+            gameState.hints = [];
+
+            // 解析LP
+            const lpRegex = /Debug\.SetPlayerInfo\((\d+),(\d+)/g;
+            let match;
+            while ((match = lpRegex.exec(text)) !== null) {
+                const player = parseInt(match[1]);
+                const lp = parseInt(match[2]);
+                if (player === 0) gameState.playerLP = lp;
+                else gameState.opponentLP = lp;
+            }
+
+            // 解析AI名字
+            const aiNameMatch = text.match(/Debug\.SetAIName\("([^"]*)"\)/);
+            if (aiNameMatch) gameState.opponentName = aiNameMatch[1];
+
+            // 解析提示文本（支持多条）
+            const hintRegex = /Debug\.ShowHint\("([^"]*)"\)/g;
+            while ((match = hintRegex.exec(text)) !== null) {
+                if (!gameState.hints) gameState.hints = [];
+                gameState.hints.push(match[1]);
+            }
+
+            // 解析AddCard
+            const cardRegex = /Debug\.AddCard\((\d+),(\d+),(\d+),(\w+),(\d+),(\w+)\)/g;
+            while ((match = cardRegex.exec(text)) !== null) {
+                const code = parseInt(match[1]);
+                const owner = parseInt(match[2]);
+                const controller = parseInt(match[3]);
+                const location = match[4];
+                const seq = parseInt(match[5]);
+                const pos = match[6];
+
+                // 从缓存或API获取卡牌数据
+                let card = getCardFromCache(code);
+                if (!card) {
+                    card = { id: code, name: code.toString(), cn_name: code.toString() };
+                }
+
+                // 解析表示形式
+                let faceUp = true, position = 'atk';
+                if (pos === 'POS_FACEUP_ATTACK') { faceUp = true; position = 'atk'; }
+                else if (pos === 'POS_FACEUP_DEFENSE') { faceUp = true; position = 'def'; }
+                else if (pos === 'POS_FACEDOWN_DEFENSE') { faceUp = false; position = 'def'; }
+                else if (pos === 'POS_FACEDOWN_ATTACK') { faceUp = false; position = 'atk'; }
+                else if (pos === 'POS_FACEDOWN') { faceUp = false; position = 'atk'; }
+                else if (pos === 'POS_FACEUP') { faceUp = true; position = 'atk'; }
+
+                const cardData = { ...card, position, faceUp, owner, controller, overlay: [] };
+
+                // 根据location和controller放置
+                const isOpponent = controller === 1;
+                if (location === 'LOCATION_MZONE') {
+                    let zoneId;
+                    if (!isOpponent && seq === 5) zoneId = 'extra-monster-l';
+                    else if (isOpponent && seq === 5) zoneId = 'extra-monster-r';
+                    else zoneId = (isOpponent ? 'opponent-' : 'player-') + 'monster-' + seq;
+                    placeToField(cardData, zoneId);
+                } else if (location === 'LOCATION_SZONE') {
+                    const zoneId = (isOpponent ? 'opponent-' : 'player-') + 's-t-' + seq;
+                    placeToField(cardData, zoneId);
+                } else if (location === 'LOCATION_FZONE') {
+                    const zoneId = (isOpponent ? 'opponent-' : 'player-') + 'field';
+                    placeToField(cardData, zoneId);
+                } else if (location === 'LOCATION_HAND') {
+                    if (isOpponent) gameState.opponentHand.push(cardData);
+                    else gameState.hand.push(cardData);
+                } else if (location === 'LOCATION_DECK') {
+                    const zoneId = (isOpponent ? 'opponent-' : 'player-') + 'deck';
+                    placeToField(cardData, zoneId);
+                } else if (location === 'LOCATION_EXTRA') {
+                    const zoneId = (isOpponent ? 'opponent-' : 'player-') + 'extra';
+                    placeToField(cardData, zoneId);
+                } else if (location === 'LOCATION_GRAVE') {
+                    const zoneId = (isOpponent ? 'opponent-' : 'player-') + 'graveyard';
+                    placeToField(cardData, zoneId);
+                } else if (location === 'LOCATION_REMOVED') {
+                    const zoneId = (isOpponent ? 'opponent-' : 'player-') + 'banished';
+                    placeToField(cardData, zoneId);
+                }
+            }
+
+            // 刷新界面
+            updateDisplay();
+            updateHintPreview();
+            renderField();
+            renderHand();
+            renderOpponentHand();
+            updateCounts();
+            closeAllModals();
+            showToast('lua文件残局已加载');
+
+            // 异步加载缺失的卡牌数据
+            const missingCodes = new Set();
+            function collectMissing(card) {
+                if (card && card.id && (!card.cn_name || card.cn_name === card.id.toString())) {
+                    missingCodes.add(card.id);
+                }
+            }
+            Object.values(gameState.field).forEach(zoneData => {
+                const cards = Array.isArray(zoneData) ? zoneData : [zoneData];
+                cards.forEach(collectMissing);
+            });
+            gameState.hand.forEach(collectMissing);
+            gameState.opponentHand.forEach(collectMissing);
+            if (missingCodes.size > 0) {
+                loadMissingCards(Array.from(missingCodes));
+            }
+
+            // 重置file input
+            event.target.value = '';
+        }
+
+        async function loadMissingCards(codes) {
+            // cardset API 每次最多查询100条，分批处理
+            const batchSize = 100;
+            for (let i = 0; i < codes.length; i += batchSize) {
+                const batch = codes.slice(i, i + batchSize);
+                try {
+                    const response = await fetch('https://ygocdb.com/api/v0/cardset', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids: batch })
+                    });
+                    const result = await response.json();
+                    for (const code of batch) {
+                        const key = code.toString();
+                        if (result[key]) {
+                            const raw = result[key];
+                            // 转换为统一的卡牌数据格式
+                            const cardData = {
+                                id: raw.id,
+                                cn_name: raw.text?.name || raw.id.toString(),
+                                sc_name: raw.text?.name || raw.id.toString(),
+                                name: raw.text?.name || raw.id.toString(),
+                                text: {
+                                    types: raw.text?.types || '',
+                                    desc: raw.text?.desc || ''
+                                }
+                            };
+                            addToCache(cardData);
+                            updateCardDataInState(code, cardData);
+                        }
+                    }
+                } catch (e) {
+                    console.log('批量加载卡牌数据失败:', batch);
+                }
+            }
+            // 重新渲染
+            renderField();
+            renderHand();
+            renderOpponentHand();
+            updateCounts();
+        }
+
+        function updateCardDataInState(cardId, cardData) {
+            function updateCard(card) {
+                if (card && card.id === cardId) {
+                    Object.assign(card, cardData);
+                }
+            }
+            Object.values(gameState.field).forEach(zoneData => {
+                const cards = Array.isArray(zoneData) ? zoneData : [zoneData];
+                cards.forEach(updateCard);
+            });
+            gameState.hand.forEach(updateCard);
+            gameState.opponentHand.forEach(updateCard);
+        }
+
+        function getCardFromCache(code) {
+            // 从localStorage缓存中查找
+            const cache = JSON.parse(localStorage.getItem('yugioh-card-cache') || '{}');
+            if (cache[code]) return cache[code];
+            return null;
+        }
+
+        function clearField() {
+            showConfirm('确定要清空所有卡牌吗？', () => {
+                gameState.field = {};
+                gameState.hand = [];
+                gameState.opponentHand = [];
+                gameState.playerExtra = [];
+                gameState.opponentExtra = [];
+                gameState.playerGraveyard = [];
+                gameState.opponentGraveyard = [];
+                gameState.playerBanished = [];
+                gameState.opponentBanished = [];
+                gameState.playerDeck = [];
+                gameState.opponentDeck = [];
+                gameState.hints = [];
+                updateHintPreview();
+                renderField();
+                renderHand();
+                renderOpponentHand();
+                updateCounts();
+                showToast('场地已清空');
+            });
+        }
+
+        function showConfirm(message, onConfirm) {
+            const overlay = document.getElementById('confirm-overlay');
+            document.getElementById('confirm-message').textContent = message;
+            overlay.classList.add('show');
+
+            const okBtn = document.getElementById('confirm-ok');
+            const cancelBtn = document.getElementById('confirm-cancel');
+
+            function cleanup() {
+                overlay.classList.remove('show');
+                okBtn.replaceWith(okBtn.cloneNode(true));
+                cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+            }
+
+            document.getElementById('confirm-ok').onclick = () => {
+                cleanup();
+                onConfirm();
+            };
+            document.getElementById('confirm-cancel').onclick = () => {
+                cleanup();
+            };
+        }
+
+        function updateDisplay() {
+            document.getElementById('player-lp').textContent = gameState.playerLP;
+            document.getElementById('opponent-lp').textContent = gameState.opponentLP;
+            document.getElementById('player-name').textContent = gameState.playerName;
+            document.getElementById('opponent-name').textContent = gameState.opponentName;
+        }
+
+        function closeAllModals() {
+            document.querySelectorAll('.lp-editor, .save-load-modal, .confirm-overlay').forEach(m => {
+                m.classList.remove('open');
+                m.classList.remove('show');
+            });
+            document.getElementById('overlay').classList.remove('show');
+            selectedCard = null;
+            selectedZone = null;
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+    </script>
+</body>
+</html>
